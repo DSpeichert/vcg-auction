@@ -16,6 +16,24 @@ type Bid map[int64]float64
 // Contains bids for all agents (1..n)
 type BidSet []Bid
 
+func (bs BidSet) CopyExcludingAgent(agent int) (new_bs BidSet) {
+	new_bs = make(BidSet, len(bs)-1)
+	for a, bid := range bs {
+		if a < agent {
+			new_bs[a] = make(Bid)
+			for k, v := range bid {
+				new_bs[a][k] = v
+			}
+		} else if a > agent {
+			new_bs[a-1] = make(Bid)
+			for k, v := range bid {
+				new_bs[a-1][k] = v
+			}
+		}
+	}
+	return
+}
+
 // Allocation: Agent x Item = Bool
 // Agent 0 is "nobody"
 type Allocation map[int]map[int]bool
@@ -58,18 +76,18 @@ func (a Allocation) Copy() (c Allocation) {
 }
 
 type Solution struct {
-	Allocation     Allocation
-	TotalUtility   float64
-	PricePerAgent  []float64
-	BestSolution   *Solution
-	SecondSolution *Solution
+	Allocation    Allocation
+	TotalUtility  float64
+	PricePerAgent []float64
 }
 
-func (s *Solution) CalculatePrices(bs BidSet) {
+func (s *Solution) CalculatePrices(bs BidSet, n, m int) {
 	s.PricePerAgent = make([]float64, len(s.Allocation))
 	for agent, _ := range s.Allocation {
 		if agent > 0 {
-			s.PricePerAgent[agent] = s.SecondSolution.Allocation.FindTotalUtility(bs) - s.Allocation.FindTotalUtilityExceptAgent(bs, agent)
+			new_bs := bs.CopyExcludingAgent(agent)
+			alternative_solution := solveAllocation(new_bs, n-1, m)
+			s.PricePerAgent[agent] = alternative_solution.TotalUtility - s.Allocation.FindTotalUtilityExceptAgent(bs, agent)
 		}
 	}
 }
@@ -99,20 +117,12 @@ func main() {
 	}
 
 	// start looking for solutions
-	var solution Solution
-	allocation := make(Allocation)
-	for a := 0; a <= n; a++ {
-		allocation[a] = make(map[int]bool)
-	}
 	start = time.Now()
-	recursiveAllocationGenerator(&solution, bs, allocation, 0, m)
-	solution.Allocation = solution.BestSolution.Allocation.Copy()
-	solution.TotalUtility = solution.BestSolution.TotalUtility
-	solution.CalculatePrices(bs)
-	fmt.Printf("%+v\n", solution)
+	solution := solveAllocation(bs, n, m)
+	solution.CalculatePrices(bs, n, m)
 	elapsed = time.Since(start)
+	fmt.Printf("%+v\n", solution)
 	fmt.Printf("Finding solution took %s\n", elapsed)
-
 }
 
 // this is not parallel - no need to synchronize map writes
@@ -144,26 +154,32 @@ func recursiveRandomBidGenerator(b Bid, carry int64, previous_sum int, current_b
 	}
 }
 
+func solveAllocation(bs BidSet, n, m int) (s Solution) {
+	allocation := make(Allocation)
+	for a := 0; a <= n; a++ {
+		allocation[a] = make(map[int]bool)
+	}
+	recursiveAllocationGenerator(&s, bs, allocation, 0, m)
+	return
+}
+
 func recursiveAllocationGenerator(s *Solution, bs BidSet, a Allocation, current_item, items int) {
-	for agent, al := range a {
+	for agent := 0; agent < len(a); agent++ {
 		fmt.Printf("agent: %d, current_item: %d\n", agent, current_item)
-		if agent != 0 {
-			delete(a[agent-1], current_item)
-		}
-		al[current_item] = true
+		a[agent][current_item] = true
 
 		if current_item < items-1 {
+			fmt.Println("branching")
 			recursiveAllocationGenerator(s, bs, a, current_item+1, items)
+			delete(a[agent], current_item)
 		} else {
 			fmt.Printf("Considering allocation: %+v\n", a)
 			total_utility := a.FindTotalUtility(bs)
 			fmt.Printf("Total utility: %f\n", total_utility)
 
-			if s.BestSolution == nil || s.BestSolution.TotalUtility < total_utility {
-				s.SecondSolution = s.BestSolution
-				s.BestSolution = &Solution{Allocation: a.Copy(), TotalUtility: total_utility}
-			} else if s.SecondSolution == nil || s.SecondSolution.TotalUtility < total_utility {
-				s.SecondSolution = &Solution{Allocation: a.Copy(), TotalUtility: total_utility}
+			if s.TotalUtility < total_utility {
+				s.Allocation = a.Copy()
+				s.TotalUtility = total_utility
 			}
 
 			// cleanup for backtrack
