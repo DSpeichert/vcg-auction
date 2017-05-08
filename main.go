@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -164,25 +165,31 @@ func solveAllocation(bs BidSet, n, m int) (s Solution) {
 }
 
 func recursiveAllocationGenerator(s *Solution, bs BidSet, a Allocation, current_item, items int) {
+	var wg sync.WaitGroup
+	wg.Add(len(a))
 	for agent := 0; agent < len(a); agent++ {
-		fmt.Printf("agent: %d, current_item: %d\n", agent, current_item)
-		a[agent][current_item] = true
+		go func(s *Solution, bs BidSet, a Allocation, current_item, items, agent int) {
+			defer wg.Done()
+			//fmt.Printf("agent: %d, current_item: %d\n", agent, current_item)
+			a[agent][current_item] = true
 
-		if current_item < items-1 {
-			recursiveAllocationGenerator(s, bs, a, current_item+1, items)
-			delete(a[agent], current_item)
-		} else {
-			fmt.Printf("Considering allocation: %+v\n", a)
-			total_utility := a.FindTotalUtility(bs)
-			fmt.Printf("Total utility: %f\n", total_utility)
+			if current_item < items-1 {
+				recursiveAllocationGenerator(s, bs, a, current_item+1, items)
+				delete(a[agent], current_item)
+			} else {
+				//fmt.Printf("Considering allocation: %+v\n", a)
+				total_utility := a.FindTotalUtility(bs)
+				//fmt.Printf("Total utility: %f\n", total_utility)
 
-			if s.TotalUtility < total_utility {
-				s.Allocation = a.Copy()
-				s.TotalUtility = total_utility
+				if s.TotalUtility < total_utility {
+					s.Allocation = a.Copy()
+					s.TotalUtility = total_utility
+				}
+
+				// cleanup for backtrack
+				delete(a[agent], current_item)
 			}
-
-			// cleanup for backtrack
-			delete(a[agent], current_item)
-		}
+		}(s, bs, a.Copy(), current_item, items, agent)
 	}
+	wg.Wait()
 }
