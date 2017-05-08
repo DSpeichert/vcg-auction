@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"math/rand"
-	"os"
 	"strconv"
 	"time"
 )
@@ -45,7 +44,34 @@ func (a Allocation) FindTotalUtility(bs BidSet) (u float64) {
 			flags = flags | 1<<uint(item)
 		}
 		if agent > 0 {
-			u += bs[agent][flags]
+			var value float64
+			switch agent {
+			case 1:
+				if v, ok := bs[agent][flags]; ok {
+					value = v
+				} else {
+					value = 5
+				}
+			case 2:
+				if v, ok := bs[agent][flags]; ok {
+					value = v
+				} else {
+					value = 4
+				}
+			case 3:
+				if v, ok := bs[agent][flags]; ok {
+					value = v
+				} else {
+					value = 3
+				}
+			case 4:
+				if v, ok := bs[agent][flags]; ok {
+					value = v
+				} else {
+					value = 3
+				}
+			}
+			u += value
 		}
 	}
 	return
@@ -93,20 +119,42 @@ func (s *Solution) CalculatePrices(bs BidSet, n, m int) {
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		fmt.Println("Pass n and m as arguments.")
-		os.Exit(1)
-	}
-	n, _ := strconv.Atoi(os.Args[1])
-	m, _ := strconv.Atoi(os.Args[2])
+	n := 4
+	m := 4
 	fmt.Printf("Using n = %d agents and m = %d items\n", n, m)
 
-	rand.Seed(time.Now().UnixNano())
-	fmt.Println("Generating agent's utilities for all combinations of allocations to them.")
-	start := time.Now()
-	bs := randomizeBidSet(n, m)
-	elapsed := time.Since(start)
-	fmt.Printf("Randomizing input data took %s\n", elapsed)
+	bs := make(BidSet, 5)
+	for k, _ := range bs {
+		bs[k] = make(Bid)
+	}
+
+	bs[1][0] = 0
+	bs[1][1<<0] = 1 // agent 1, item 1
+	bs[1][1<<1] = 2
+	bs[1][1<<2] = 2
+	bs[1][1<<3] = 4
+	bs[1][1|1<<1|1<<2|1<<3] = 4 // agent 1, items {a, b, c, d}
+
+	bs[2][0] = 0
+	bs[2][1<<0] = 1   // agent 2, item a
+	bs[2][1<<1] = 1   // agent 2, item b
+	bs[2][1<<2] = 1   // agent 2, item c
+	bs[2][1<<3] = 1   // agent 2, item d
+	bs[2][1|1<<1] = 5 // agent 2, item {a, b}
+
+	bs[3][0] = 0
+	bs[3][1<<0] = 1      // agent 3, item a
+	bs[3][1<<1] = 2      // agent 3, item b
+	bs[3][1<<2] = 4      // agent 3, item c
+	bs[3][1<<3] = 1      // agent 3, item d
+	bs[3][1<<1|1<<2] = 7 // agent 2, item {b, c}
+
+	bs[4][0] = 0
+	bs[4][1<<0] = 1 // agent 4, item a
+	bs[4][1<<1] = 1 // agent 4, item b
+	bs[4][1<<2] = 1 // agent 4, item c
+	bs[4][1<<3] = 3 // agent 4, item d
+
 	for agent, bid := range bs {
 		if agent != 0 { // agent 0 is nobody!
 			fmt.Printf("Bids for Agent %d\n", agent)
@@ -117,10 +165,10 @@ func main() {
 	}
 
 	// start looking for solutions
-	start = time.Now()
+	start := time.Now()
 	solution := solveAllocation(bs, n, m)
 	solution.CalculatePrices(bs, n, m)
-	elapsed = time.Since(start)
+	elapsed := time.Since(start)
 	fmt.Printf("%+v\n", solution)
 	fmt.Printf("Finding solution took %s\n", elapsed)
 }
