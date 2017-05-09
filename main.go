@@ -100,19 +100,21 @@ func main() {
 	}
 	n, _ := strconv.Atoi(os.Args[1])
 	m, _ := strconv.Atoi(os.Args[2])
-	fmt.Printf("Using n = %d agents and m = %d items\n", n, m)
+	fmt.Printf("Using n = %d agents and m = %d items\nWill use %d threads.\n", n, m, n*n)
 
 	rand.Seed(time.Now().UnixNano())
-	fmt.Println("Generating agent's utilities for all combinations of allocations to them.")
+	fmt.Println("Generating agent's utilities for all combinations of allocations to them...")
 	start := time.Now()
 	bs := randomizeBidSet(n, m)
 	elapsed := time.Since(start)
-	fmt.Printf("Randomizing input data took %s\n", elapsed)
-	for agent, bid := range bs {
-		if agent != 0 { // agent 0 is nobody!
-			fmt.Printf("Bids for Agent %d\n", agent)
-			for items, utility := range bid {
-				fmt.Printf("  %0"+strconv.Itoa(m)+"b => %f\n", items, utility)
+	fmt.Printf("Randomizing agent's utilities took %s\n", elapsed)
+	if m < 10 {
+		for agent, bid := range bs {
+			if agent != 0 { // agent 0 is nobody!
+				fmt.Printf("Bids for Agent %d\n", agent)
+				for items, utility := range bid {
+					fmt.Printf("  %0"+strconv.Itoa(m)+"b => %f\n", items, utility)
+				}
 			}
 		}
 	}
@@ -160,36 +162,41 @@ func solveAllocation(bs BidSet, n, m int) (s Solution) {
 	for a := 0; a <= n; a++ {
 		allocation[a] = make(map[int]bool)
 	}
-	recursiveAllocationGenerator(&s, bs, allocation, 0, m)
+	recursiveAllocationGenerator(&s, bs, allocation, 0, m, 2, nil)
 	return
 }
 
-func recursiveAllocationGenerator(s *Solution, bs BidSet, a Allocation, current_item, items int) {
-	var wg sync.WaitGroup
-	wg.Add(len(a))
+func recursiveAllocationGenerator(s *Solution, bs BidSet, a Allocation, current_item, items, nested_parallelism int, pwg *sync.WaitGroup) {
+	if pwg != nil {
+		defer pwg.Done()
+	}
+	wg := &sync.WaitGroup{}
 	for agent := 0; agent < len(a); agent++ {
-		go func(s *Solution, bs BidSet, a Allocation, current_item, items, agent int) {
-			defer wg.Done()
-			//fmt.Printf("agent: %d, current_item: %d\n", agent, current_item)
-			a[agent][current_item] = true
 
-			if current_item < items-1 {
-				recursiveAllocationGenerator(s, bs, a, current_item+1, items)
-				delete(a[agent], current_item)
+		//fmt.Printf("agent: %d, current_item: %d\n", agent, current_item)
+		a[agent][current_item] = true
+
+		if current_item < items-1 {
+			if nested_parallelism > current_item {
+				wg.Add(1)
+				go recursiveAllocationGenerator(s, bs, a.Copy(), current_item+1, items, nested_parallelism, wg)
 			} else {
-				//fmt.Printf("Considering allocation: %+v\n", a)
-				total_utility := a.FindTotalUtility(bs)
-				//fmt.Printf("Total utility: %f\n", total_utility)
-
-				if s.TotalUtility < total_utility {
-					s.Allocation = a.Copy()
-					s.TotalUtility = total_utility
-				}
-
-				// cleanup for backtrack
-				delete(a[agent], current_item)
+				recursiveAllocationGenerator(s, bs, a, current_item+1, items, nested_parallelism, nil)
 			}
-		}(s, bs, a.Copy(), current_item, items, agent)
+			delete(a[agent], current_item)
+		} else {
+			//fmt.Printf("Considering allocation: %+v\n", a)
+			total_utility := a.FindTotalUtility(bs)
+			//fmt.Printf("Total utility: %f\n", total_utility)
+
+			if s.TotalUtility < total_utility {
+				s.Allocation = a.Copy()
+				s.TotalUtility = total_utility
+			}
+
+			// cleanup for backtrack
+			delete(a[agent], current_item)
+		}
 	}
 	wg.Wait()
 }

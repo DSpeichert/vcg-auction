@@ -113,6 +113,7 @@ func (s *Solution) CalculatePrices(bs BidSet, n, m int) {
 		if agent > 0 {
 			new_bs := bs.CopyExcludingAgent(agent)
 			alternative_solution := solveAllocation(new_bs, n-1, m)
+			fmt.Printf("Solution used for computing price for Agent %d:\n%+v\n", agent, alternative_solution)
 			s.PricePerAgent[agent] = alternative_solution.TotalUtility - s.Allocation.FindTotalUtilityExceptAgent(bs, agent)
 		}
 	}
@@ -133,7 +134,7 @@ func main() {
 	bs[1][1<<1] = 2
 	bs[1][1<<2] = 2
 	bs[1][1<<3] = 4
-	bs[1][1|1<<1|1<<2|1<<3] = 4 // agent 1, items {a, b, c, d}
+	bs[1][1|1<<1|1<<2|1<<3] = 11 // agent 1, items {a, b, c, d}
 
 	bs[2][0] = 0
 	bs[2][1<<0] = 1   // agent 2, item a
@@ -213,16 +214,16 @@ func solveAllocation(bs BidSet, n, m int) (s Solution) {
 
 func recursiveAllocationGenerator(s *Solution, bs BidSet, a Allocation, current_item, items int) {
 	for agent := 0; agent < len(a); agent++ {
-		fmt.Printf("agent: %d, current_item: %d\n", agent, current_item)
+		//fmt.Printf("agent: %d, current_item: %d\n", agent, current_item)
 		a[agent][current_item] = true
 
 		if current_item < items-1 {
 			recursiveAllocationGenerator(s, bs, a, current_item+1, items)
 			delete(a[agent], current_item)
 		} else {
-			fmt.Printf("Considering allocation: %+v\n", a)
+			//fmt.Printf("Considering allocation: %+v\n", a)
 			total_utility := a.FindTotalUtility(bs)
-			fmt.Printf("Total utility: %f\n", total_utility)
+			//fmt.Printf("Total utility: %f\n", total_utility)
 
 			if s.TotalUtility < total_utility {
 				s.Allocation = a.Copy()
